@@ -493,12 +493,13 @@ export class GameEngine {
     return result
   }
 
-  getPlayerHandStates(): { seatIndex: number; bet: number; totalBet: number; hasActed: boolean }[] {
+  getPlayerHandStates(): { seatIndex: number; bet: number; totalBet: number; hasActed: boolean; status: PlayerStatus }[] {
     return [...this.players.values()].map((p) => ({
       seatIndex: p.seatIndex,
       bet: p.bet,
       totalBet: p.totalBet,
       hasActed: p.hasActed,
+      status: p.status,
     }))
   }
 

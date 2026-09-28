@@ -111,12 +111,18 @@ export class AIPlayerManager {
 
     // Count active opponents (non-folded, non-self)
     const allHands = engine.getPlayerHandStates()
-    const numOpponents = allHands.filter((h) => h.seatIndex !== ai.seatIndex).length
+    const numOpponents = allHands.filter(
+      (h) => h.seatIndex !== ai.seatIndex && h.status !== 'folded'
+    ).length
+
+    // Effective pot = collected pot + all bets currently on the table
+    const effectivePot =
+      gameState.pot + allHands.reduce((sum, h) => sum + h.bet, 0)
 
     const context: GameContext = {
       holeCards: ai.holeCards,
       communityCards: gameState.communityCards,
-      pot: gameState.pot,
+      pot: effectivePot,
       currentBet: engine.getCurrentBet(),
       myBet: hand.bet,
       myChips: playerState.chips,

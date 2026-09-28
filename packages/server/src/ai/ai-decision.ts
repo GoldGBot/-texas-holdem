@@ -115,36 +115,35 @@ function fallbackDecision(
   const callAmount = context.currentBet - context.myBet
   const potOdds = calculatePotOdds(callAmount, context.pot)
   const effectiveEquity = equity.winRate + equity.tieRate * 0.5
-  const minRaiseTotal = context.currentBet + context.minRaise
+
+  // Raise sizing is based on the effective pot (collected pot + bets on the table),
+  // so sizing stays meaningful as the betting round escalates.
+  const increment = Math.max(
+    context.minRaise,
+    Math.round(context.pot * fallback.aggression * (0.5 + Math.random() * 0.5))
+  )
+  const raiseTotal = context.currentBet + increment
+
+  // If a raise would commit half our remaining stack or more, just go all-in.
+  // This prevents endless min-raise wars between aggressive players.
+  const makeRaise = (): AIAction => {
+    const needed = raiseTotal - context.myBet
+    if (needed >= context.myChips * 0.5) return { type: 'allIn' }
+    return { type: 'raise', amount: raiseTotal }
+  }
 
   // No bet to call — check or bet
   if (callAmount === 0) {
     if (effectiveEquity >= fallback.raiseThreshold || Math.random() < fallback.bluffRate) {
-      // Raise amount = total bet (currentBet + increment)
-      const increment = Math.max(
-        context.minRaise,
-        Math.round(context.pot * fallback.aggression * (0.5 + Math.random() * 0.5))
-      )
-      const raiseTotal = context.currentBet + increment
-      if (raiseTotal - context.myBet <= context.myChips) {
-        return { type: 'raise', amount: raiseTotal }
-      }
-      return { type: 'allIn' }
+      return makeRaise()
     }
     return { type: 'check' }
   }
 
-  // Must call or fold
-  if (effectiveEquity >= fallback.raiseThreshold || Math.random() < fallback.bluffRate * 0.5) {
-    const increment = Math.max(
-      context.minRaise,
-      Math.round(context.pot * fallback.aggression * (0.5 + Math.random() * 0.5))
-    )
-    const raiseTotal = context.currentBet + increment
-    if (raiseTotal - context.myBet <= context.myChips) {
-      return { type: 'raise', amount: raiseTotal }
-    }
-    return { type: 'allIn' }
+  // Facing a bet/raise — re-raise only with real equity.
+  // Never bluff re-raise into a raise; that's what causes raise wars.
+  if (effectiveEquity >= fallback.raiseThreshold) {
+    return makeRaise()
   }
 
   if (effectiveEquity >= fallback.callThreshold || effectiveEquity > potOdds) {
