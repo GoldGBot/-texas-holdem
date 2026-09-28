@@ -27,7 +27,9 @@ let anthropic: Anthropic | null = null
 function getClient(): Anthropic | null {
   if (!process.env.ANTHROPIC_API_KEY) return null
   if (!anthropic) {
-    anthropic = new Anthropic()
+    // Fail fast: a slow/unreachable/invalid API must never stall the game.
+    // No retries — fall back to the rule-based decision instead.
+    anthropic = new Anthropic({ timeout: 8000, maxRetries: 0 })
   }
   return anthropic
 }

@@ -23,6 +23,7 @@ export class WsHandler {
   private connections: Map<WebSocket, PlayerConnection> = new Map()
   private playerSockets: Map<string, WebSocket> = new Map()
   private turnTimers: Map<string, ReturnType<typeof setTimeout>> = new Map()
+  private aiWatchdogs: Map<string, ReturnType<typeof setTimeout>> = new Map()
   private roomManager: RoomManager
   private userRepo: UserRepository
   private aiManager = new AIPlayerManager()
@@ -351,6 +352,7 @@ export class WsHandler {
     if (!room) return
 
     this.clearTurnTimer(roomId)
+    this.clearAIWatchdog(roomId)
 
     const prevPhase = engine.getPhase()
     const success = engine.handleAction(seatIndex, type, amount)
@@ -466,6 +468,22 @@ export class WsHandler {
       }
     }
 
+    // Watchdog: AI turns have no human timer. If the AI decision hangs
+    // (e.g. slow/unreachable external LLM API), force fold/check so the
+    // game never stalls. Normal worst case is ~10s (2s think + 8s API timeout).
+    const watchdog = setTimeout(() => {
+      this.aiWatchdogs.delete(roomId)
+      const currentState = engine.getState()
+      if (currentState.currentTurn !== expectedSeat) return
+      const myBet = engine.getPlayerHandStates().find((h) => h.seatIndex === expectedSeat)?.bet ?? 0
+      const callAmount = engine.getCurrentBet() - myBet
+      const forced = callAmount > 0 ? 'fold' : 'check'
+      console.error(`[AI] ${currentPlayer.nickname} decision timed out, forcing ${forced}`)
+      this.processAction(roomId, currentPlayer.seatIndex, forced, undefined, currentPlayer.nickname)
+    }, 15000)
+    this.clearAIWatchdog(roomId)
+    this.aiWatchdogs.set(roomId, watchdog)
+
     // Fire and forget — but errors are caught internally
     executeAI()
   }
@@ -576,6 +594,14 @@ export class WsHandler {
     if (timer) {
       clearTimeout(timer)
       this.turnTimers.delete(roomId)
+    }
+  }
+
+  private clearAIWatchdog(roomId: string): void {
+    const timer = this.aiWatchdogs.get(roomId)
+    if (timer) {
+      clearTimeout(timer)
+      this.aiWatchdogs.delete(roomId)
     }
   }
 
